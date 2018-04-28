@@ -5,7 +5,7 @@ from datetime import datetime
 from datetime import timedelta
 from functools import reduce
 
-path = 'E:\\Users\\timregan\\Microsoft\\ProjectTorino - Logs from Trialists\\'
+path = 'E:\\Users\\timregan\\Microsoft\\ProjectTorino - Documents\\Logs from Trialists\\'
 csvFileLines = [ 'Name,DateTime,Duration,PlayCount,ReadCount' ]
 maxSecondsGapInSession = 3600 # One hour
 
@@ -14,13 +14,20 @@ def GetSession(name):
 
 def AddSessionToCSV(session, csvLines):
     if session['start'] != '' and session['duration'] != '':
-        start = datetime.strptime(session['start'], '%d/%m/%Y %H:%M:%S')
-        start = start + timedelta(seconds=session['offset'])
-        startStr = datetime.strftime(start, '%d/%m/%Y %H:%M:%S')
+        try:
+            start = datetime.strptime(session['start'], '%d/%m/%Y %H:%M:%S')
+        except ValueError:
+            start = datetime.strptime(session['start'], '%m/%d/%Y %I:%M:%S %p')
+        if start:
+            start = start + timedelta(seconds=session['offset'])
+            startStr = datetime.strftime(start, '%d/%m/%Y %H:%M:%S')
+        else:
+            startStr = session['start']
         csvLines.append(session['name'] + ',' + startStr + ',' + str(session['duration'] - session['offset']) + ',' + str(session['numPlay']) + ',' + str(session['numRead']))
 
 # Read the sub directories
-subDirs = next(os.walk(path))[1]
+blah = next(os.walk(path))
+subDirs = blah[1]
 
 # Read and process the logs in each sub-directory
 for subDir in subDirs:
@@ -75,9 +82,8 @@ for subDir in subDirs:
 
 
                     # TODO: Load the coad file and keep maxumum number of nodes and list of node types
-
-
-
+                    
+        AddSessionToCSV(currentSession, csvFileLines)
 
 # Save the CSV to disk
 with io.open(path + '\\Sessions.csv', 'w') as outputFile:
