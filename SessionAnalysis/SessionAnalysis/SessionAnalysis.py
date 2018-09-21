@@ -1,13 +1,14 @@
 # Using Python 3.6
 
 import os, io, re
+import numpy as np
+import pandas as pd
 from datetime import datetime
 from datetime import timedelta
 from functools import reduce
 
 # Constants
 path = 'E:\\Users\\timregan\\Microsoft\\ProjectTorino - Documents\\Logs from Trialists\\'
-csvFileLines = [ 'Name,LogFile,DateTime,Duration,PlayCount,ReadCount,MinNodeCount,MinThreadCount,MaxNodeCount,MaxThreadCount,SingleThreadedSequences,MultiThreadedSequences,LoopNowtBeforeOrAfter,FollowedLoops,LoopsOnMultipleThreads,ConstantsNoVariables,RandomOrInfinityNoVariables,ManualSelection,SelectionInLoop,IndependentCounters,VariablesWithoutCounters,CountersWithVariables,NestedLoops' ]
 maxSecondsGapInSession = 3600 # One hour
 
 # Returns an 'empty' session
@@ -39,45 +40,47 @@ def GetSession(name, file):
         'nestedLoops' : False } 
 
 # Add the given session as a line to the list of CSV file lines
-def AddSessionToCSV(session, csvLines):
-    # Only act on sessions with stuff in
-    if session['start'] != '' and session['duration'] != '' and (session['numPlay'] != 0 or session['numRead'] != 0):
-        # Sadly there are two DateTime formats in use in the log files, we should not have left that as a local choice
-        try:
-            start = datetime.strptime(session['start'], '%d/%m/%Y %H:%M:%S')
-        except ValueError:
-            start = datetime.strptime(session['start'], '%m/%d/%Y %I:%M:%S %p')
-        if start:
-            # Add the offset, say to the first play, to the start time
-            start = start + timedelta(seconds=session['offset'])
-            startStr = datetime.strftime(start, '%d/%m/%Y %H:%M:%S')
-        else:
-            startStr = session['start']
-        # Add the resulting data
-        csvLines.append(
-            session['name'] + ',' + 
-            session['logFile'] + ',' + 
-            startStr + ',' + 
-            str(session['duration'] - session['offset']) + ',' + 
-            str(session['numPlay']) + ',' + 
-            str(session['numRead']) + ',' + 
-            str(session['minNodeCount']) + ',' + 
-            str(session['minThreadCount']) + ',' + 
-            str(session['maxNodeCount']) + ',' + 
-            str(session['maxThreadCount']) + ',' + 
-            str(session['singleThreadedSequences']) + ',' + 
-            str(session['multiThreadedSequences']) + ',' + 
-            str(session['loopNowtBeforeOrAfter']) + ',' + 
-            str(session['followedLoops']) + ',' + 
-            str(session['loopsOnMultipleThreads']) + ',' + 
-            str(session['constantsNoVariables']) + ',' + 
-            str(session['randomOrInfinityNoVariables']) + ',' + 
-            str(session['manualSelection']) + ',' + 
-            str(session['selectionInLoop']) + ',' + 
-            str(session['independentCounters']) + ',' + 
-            str(session['variablesWithoutCounters']) + ',' + 
-            str(session['countersWithVariables']) + ',' + 
-            str(session['nestedLoops']))
+def AddSessionsToCSV(sessions, csvLines):
+    for session in sessions:
+        # Only act on sessions with stuff in
+        if session['start'] != '' and session['duration'] != '' and (session['numPlay'] != 0 or session['numRead'] != 0):
+            # Sadly there are two DateTime formats in use in the log files, we should not have left that as a local choice
+            try:
+                start = datetime.strptime(session['start'], '%d/%m/%Y %H:%M:%S')
+            except ValueError:
+                start = datetime.strptime(session['start'], '%m/%d/%Y %I:%M:%S %p')
+            if start:
+                # Add the offset, say to the first play, to the start time
+                start = start + timedelta(seconds=session['offset'])
+                startStr = datetime.strftime(start, '%d/%m/%Y %H:%M:%S')
+            else:
+                startStr = session['start']
+            # Add the resulting data
+            csvLines.append(
+                session['name'] + ',' + 
+                session['logFile'] + ',' + 
+                startStr + ',' + 
+                str(session['duration'] - session['offset']) + ',' + 
+                str(session['numPlay']) + ',' + 
+                str(session['numRead']) + ',' + 
+                str(session['minNodeCount']) + ',' + 
+                str(session['minThreadCount']) + ',' + 
+                str(session['maxNodeCount']) + ',' + 
+                str(session['maxThreadCount']) + ',' + 
+                str(session['singleThreadedSequences']) + ',' + 
+                str(session['multiThreadedSequences']) + ',' + 
+                str(session['loopNowtBeforeOrAfter']) + ',' + 
+                str(session['followedLoops']) + ',' + 
+                str(session['loopsOnMultipleThreads']) + ',' + 
+                str(session['constantsNoVariables']) + ',' + 
+                str(session['randomOrInfinityNoVariables']) + ',' + 
+                str(session['manualSelection']) + ',' + 
+                str(session['selectionInLoop']) + ',' + 
+                str(session['independentCounters']) + ',' + 
+                str(session['variablesWithoutCounters']) + ',' + 
+                str(session['countersWithVariables']) + ',' + 
+                str(session['nestedLoops']))
+
 
 # Run through the code file to gather Alex's metrics
 def ParseCodeFile(lines):
@@ -205,103 +208,114 @@ def ParseCodeFile(lines):
 
     return code
 
-# Read the sub directories
-subDirs = next(os.walk(path))[1]
 
-# Read and process the logs in each sub-directory
-for subDir in subDirs:
+def ParseSessions(path):
+    sessions = []
 
-    # Read the log, code, and exception files so that we can ingest them
-    loggedFileNames = [fileName for fileName in os.listdir(path + subDir + '\\Logs') if fileName.lower().endswith('txt')]
+    # Read the sub directories
+    subDirs = next(os.walk(path))[1]
 
-    # Run through the log files
-    for logFileName in [fileName for fileName in loggedFileNames if fileName.lower().startswith('log')]:
+    # Read and process the logs in each sub-directory
+    for subDir in subDirs:
 
-        # Set up counts etc.
-        currentSession = GetSession(subDir, logFileName)
-        previousDuration = 0
+        # Read the log, code, and exception files so that we can ingest them
+        loggedFileNames = [fileName for fileName in os.listdir(path + subDir + '\\Logs') if fileName.lower().endswith('txt')]
 
-        # Open the log file
-        with io.open(path + subDir + '\\Logs\\' + logFileName, 'r', encoding='latin-1') as file:
+        # Run through the log files
+        for logFileName in [fileName for fileName in loggedFileNames if fileName.lower().startswith('log')]:
 
-            # Read the log file and split it into lines
-            fileTextLines = file.read().split('\n')
+            # Set up counts etc.
+            currentSession = GetSession(subDir, logFileName)
+            previousDuration = 0
 
-            # Only bother with files that look like valid log files
-            if len(fileTextLines) > 0 and fileTextLines[0].startswith('Log started: '):
+            # Open the log file
+            with io.open(path + subDir + '\\Logs\\' + logFileName, 'r', encoding='latin-1') as file:
 
-                # Process each line
-                for fileTextLine in fileTextLines:
+                # Read the log file and split it into lines
+                fileTextLines = file.read().split('\n')
 
-                    # Parse out the duration
-                    if 'StartPlaying' in fileTextLine or 'ReadCode' in fileTextLine:
-                        match = re.search('\] \[([0-9]+)', fileTextLine)
-                        if match != None:
-                            candidateDuration = match.group(1)
-                            if candidateDuration != '':
-                                durationInt = int(candidateDuration)
+                # Only bother with files that look like valid log files
+                if len(fileTextLines) > 0 and fileTextLines[0].startswith('Log started: '):
 
-                                if (durationInt - previousDuration) > maxSecondsGapInSession:
-                                    # We need to start a new session
-                                    AddSessionToCSV(currentSession, csvFileLines)
-                                    newSession = GetSession(subDir, logFileName)
-                                    newSession['start'] = currentSession['start']
-                                    newSession['offset'] = durationInt
-                                    currentSession = newSession
-                                else:
-                                    # Set the offset to the first play or read in the log
-                                    if currentSession['offset'] == 0:
-                                        currentSession['offset'] = durationInt
-                                    # Keep tally of the last play or read 
-                                    currentSession['duration'] = durationInt
+                    # Process each line
+                    for fileTextLine in fileTextLines:
 
-                                # Record the duration for comparison with the next play or read
-                                previousDuration = durationInt
+                        # Parse out the duration
+                        if 'StartPlaying' in fileTextLine or 'ReadCode' in fileTextLine:
+                            match = re.search('\] \[([0-9]+)', fileTextLine)
+                            if match != None:
+                                candidateDuration = match.group(1)
+                                if candidateDuration != '':
+                                    durationInt = int(candidateDuration)
 
-                    # Save the date and time
-                    if fileTextLine.startswith('Log started: '):
-                        currentSession['start'] = fileTextLine.replace('Log started: ', '')
+                                    if (durationInt - previousDuration) > maxSecondsGapInSession:
+                                        # We need to start a new session
+                                        AddSessionToCSV(currentSession, csvFileLines)
+                                        newSession = GetSession(subDir, logFileName)
+                                        newSession['start'] = currentSession['start']
+                                        newSession['offset'] = durationInt
+                                        currentSession = newSession
+                                    else:
+                                        # Set the offset to the first play or read in the log
+                                        if currentSession['offset'] == 0:
+                                            currentSession['offset'] = durationInt
+                                        # Keep tally of the last play or read 
+                                        currentSession['duration'] = durationInt
 
-                    # Increment the counts
-                    if 'StartPlaying' in fileTextLine:
-                        currentSession['numPlay'] = currentSession['numPlay'] + 1
-                    if 'ReadCode' in fileTextLine:
-                        currentSession['numRead'] = currentSession['numRead'] + 1
+                                    # Record the duration for comparison with the next play or read
+                                    previousDuration = durationInt
 
-                    if 'StartPlaying' in fileTextLine or 'ReadCode' in fileTextLine:
-                        # Find the code file name
-                        match = re.search('(Code_[0-9]+-[0-9]+.txt)', fileTextLine)
-                        if match != None:
-                            candidateCodeFileName = match.group(1)
-                            if candidateCodeFileName != '':
-                                # Load the code file
-                                with io.open(path + subDir + '\\Logs\\' + candidateCodeFileName, 'r', encoding='latin-1') as codeFile:
-                                    codeFileLines = codeFile.read().split('\n')
-                                    # Get the data from the code file
-                                    code = ParseCodeFile(codeFileLines)
-                                    # Combine the code file's data with the current session data
-                                    currentSession['minNodeCount'] = min(currentSession['minNodeCount'], code['nodeCount'])
-                                    currentSession['minThreadCount'] = min(currentSession['minThreadCount'], code['threadCount'])
-                                    currentSession['maxNodeCount'] = max(currentSession['maxNodeCount'], code['nodeCount'])
-                                    currentSession['maxThreadCount'] = max(currentSession['maxThreadCount'], code['threadCount'])
-                                    currentSession['singleThreadedSequences'] = currentSession['singleThreadedSequences'] or code['singleThreadedSequences']
-                                    currentSession['multiThreadedSequences'] = currentSession['multiThreadedSequences'] or code['multiThreadedSequences']
-                                    currentSession['loopNowtBeforeOrAfter'] = currentSession['loopNowtBeforeOrAfter'] or code['loopNowtBeforeOrAfter']
-                                    currentSession['followedLoops'] = currentSession['followedLoops'] or code['followedLoops']
-                                    currentSession['loopsOnMultipleThreads'] = currentSession['loopsOnMultipleThreads'] or code['loopsOnMultipleThreads']
-                                    currentSession['constantsNoVariables'] = currentSession['constantsNoVariables'] or code['constantsNoVariables']
-                                    currentSession['randomOrInfinityNoVariables'] = currentSession['randomOrInfinityNoVariables'] or code['randomOrInfinityNoVariables']
-                                    currentSession['manualSelection'] = currentSession['manualSelection'] or code['manualSelection']
-                                    currentSession['selectionInLoop'] = currentSession['selectionInLoop'] or code['selectionInLoop']
-                                    currentSession['independentCounters'] = currentSession['independentCounters'] or code['independentCounters']
-                                    currentSession['variablesWithoutCounters'] = currentSession['variablesWithoutCounters'] or code['variablesWithoutCounters']
-                                    currentSession['countersWithVariables'] = currentSession['countersWithVariables'] or code['countersWithVariables']
-                                    currentSession['nestedLoops'] = currentSession['nestedLoops'] or code['nestedLoops']
-          
-        # Commit the current session as a line in the lines for the CSV file
-        AddSessionToCSV(currentSession, csvFileLines)
+                        # Save the date and time
+                        if fileTextLine.startswith('Log started: '):
+                            currentSession['start'] = fileTextLine.replace('Log started: ', '')
 
-# Save the CSV to disk
-with io.open(path + '\\Sessions.csv', 'w') as outputFile:
-    mergedOutputLines = '\n'.join(csvFileLines)
-    outputFile.writelines(mergedOutputLines)
+                        # Increment the counts
+                        if 'StartPlaying' in fileTextLine:
+                            currentSession['numPlay'] = currentSession['numPlay'] + 1
+                        if 'ReadCode' in fileTextLine:
+                            currentSession['numRead'] = currentSession['numRead'] + 1
+
+                        if 'StartPlaying' in fileTextLine or 'ReadCode' in fileTextLine:
+                            # Find the code file name
+                            match = re.search('(Code_[0-9]+-[0-9]+.txt)', fileTextLine)
+                            if match != None:
+                                candidateCodeFileName = match.group(1)
+                                if candidateCodeFileName != '':
+                                    # Load the code file
+                                    with io.open(path + subDir + '\\Logs\\' + candidateCodeFileName, 'r', encoding='latin-1') as codeFile:
+                                        codeFileLines = codeFile.read().split('\n')
+                                        # Get the data from the code file
+                                        code = ParseCodeFile(codeFileLines)
+                                        # Combine the code file's data with the current session data
+                                        currentSession['minNodeCount'] = min(currentSession['minNodeCount'], code['nodeCount'])
+                                        currentSession['minThreadCount'] = min(currentSession['minThreadCount'], code['threadCount'])
+                                        currentSession['maxNodeCount'] = max(currentSession['maxNodeCount'], code['nodeCount'])
+                                        currentSession['maxThreadCount'] = max(currentSession['maxThreadCount'], code['threadCount'])
+                                        currentSession['singleThreadedSequences'] = currentSession['singleThreadedSequences'] or code['singleThreadedSequences']
+                                        currentSession['multiThreadedSequences'] = currentSession['multiThreadedSequences'] or code['multiThreadedSequences']
+                                        currentSession['loopNowtBeforeOrAfter'] = currentSession['loopNowtBeforeOrAfter'] or code['loopNowtBeforeOrAfter']
+                                        currentSession['followedLoops'] = currentSession['followedLoops'] or code['followedLoops']
+                                        currentSession['loopsOnMultipleThreads'] = currentSession['loopsOnMultipleThreads'] or code['loopsOnMultipleThreads']
+                                        currentSession['constantsNoVariables'] = currentSession['constantsNoVariables'] or code['constantsNoVariables']
+                                        currentSession['randomOrInfinityNoVariables'] = currentSession['randomOrInfinityNoVariables'] or code['randomOrInfinityNoVariables']
+                                        currentSession['manualSelection'] = currentSession['manualSelection'] or code['manualSelection']
+                                        currentSession['selectionInLoop'] = currentSession['selectionInLoop'] or code['selectionInLoop']
+                                        currentSession['independentCounters'] = currentSession['independentCounters'] or code['independentCounters']
+                                        currentSession['variablesWithoutCounters'] = currentSession['variablesWithoutCounters'] or code['variablesWithoutCounters']
+                                        currentSession['countersWithVariables'] = currentSession['countersWithVariables'] or code['countersWithVariables']
+                                        currentSession['nestedLoops'] = currentSession['nestedLoops'] or code['nestedLoops']
+            sessions.append(currentSession)
+    return sessions
+
+
+# Save the sessions to CSV
+def SaveToCSV(sessions):
+    csvFileLines = [ 'Name,LogFile,DateTime,Duration,PlayCount,ReadCount,MinNodeCount,MinThreadCount,MaxNodeCount,MaxThreadCount,SingleThreadedSequences,MultiThreadedSequences,LoopNowtBeforeOrAfter,FollowedLoops,LoopsOnMultipleThreads,ConstantsNoVariables,RandomOrInfinityNoVariables,ManualSelection,SelectionInLoop,IndependentCounters,VariablesWithoutCounters,CountersWithVariables,NestedLoops' ]
+    AddSessionsToCSV(sessions, csvFileLines)
+    with io.open(path + '\\Sessions.csv', 'w') as outputFile:
+        mergedOutputLines = '\n'.join(csvFileLines)
+        outputFile.writelines(mergedOutputLines)
+
+
+def DeriveProgression(sessions):
+
