@@ -8,7 +8,7 @@ from datetime import timedelta
 from functools import reduce
 
 # Constants
-path = 'E:\\Users\\timregan\\Microsoft\\ProjectTorino - Documents\\Logs from Trialists\\'
+path = 'C:\\Users\\timregan\\Microsoft\\ProjectTorino - Logs from Trialists\\'
 maxSecondsGapInSession = 3600 # One hour
 
 # Returns an 'empty' session
@@ -250,7 +250,7 @@ def ParseSessions(path):
 
                                     if (durationInt - previousDuration) > maxSecondsGapInSession:
                                         # We need to start a new session
-                                        AddSessionToCSV(currentSession, csvFileLines)
+                                        sessions.append(currentSession)
                                         newSession = GetSession(subDir, logFileName)
                                         newSession['start'] = currentSession['start']
                                         newSession['offset'] = durationInt
@@ -317,5 +317,17 @@ def SaveToCSV(sessions):
         outputFile.writelines(mergedOutputLines)
 
 
-def DeriveProgression(sessions):
+def NamedTimelines(sessions, column_name):
+    pdsessions = pd.DataFrame(sessions)
+    ungrouped = pdsessions[['name', 'start', column_name]]
+    ungrouped.set_index('start', inplace=True)
+    grouped = ungrouped.groupby(['name', 'start'])
+    return grouped.aggregate({column_name: 'first'})
 
+
+# sessions = ParseSessions(path)
+# for session_key in list(sessions[0].keys()):
+#     if session_key not in ['name', 'logFile', 'start']:
+#         named_timelines = NamedTimelines(sessions, session_key)
+#         for name in named_timelines.index.unique(level='name'):
+#             named_timelines.loc[name].plot()
