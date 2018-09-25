@@ -3,9 +3,11 @@
 import os, io, re
 import numpy as np
 import pandas as pd
+import matplotlib as plt
 from datetime import datetime
 from datetime import timedelta
 from functools import reduce
+from matplotlib.backends.backend_pdf import PdfPages
 
 # Constants
 path = 'C:\\Users\\timregan\\Microsoft\\ProjectTorino - Logs from Trialists\\'
@@ -325,9 +327,22 @@ def NamedTimelines(sessions, column_name):
     return grouped.aggregate({column_name: 'first'})
 
 
-# sessions = ParseSessions(path)
-# for session_key in list(sessions[0].keys()):
-#     if session_key not in ['name', 'logFile', 'start']:
-#         named_timelines = NamedTimelines(sessions, session_key)
-#         for name in named_timelines.index.unique(level='name'):
-#             named_timelines.loc[name].plot()
+def GraphSessions(sessions):
+    figures = []
+    for session_key in list(sessions[0].keys()):
+        if session_key not in ['name', 'logFile', 'start']:
+            named_timelines = NamedTimelines(sessions, session_key)
+            for name in named_timelines.index.unique(level='name'):
+                if len(named_timelines.loc[name]) > 20:
+                    try:
+                        figures.append(named_timelines.loc[name].plot(title=name + ' ' + session_key).get_figure())
+                    except TypeError:
+                        pass
+    return figures
+
+
+def SaveToPDF(figures, file_name):
+    pdf = PdfPages(file_name)
+    for figure in figures:
+        figure.savefig(pdf, format='pdf')
+    pdf.close()
